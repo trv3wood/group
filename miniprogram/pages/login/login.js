@@ -1,4 +1,16 @@
-// pages/Login/Login.js
+// pages/login/login.js
+const app = getApp();
+// 封装 wx.request 为 Promise
+const promisifyRequest = (options) => {
+  return new Promise((resolve, reject) => {
+    wx.request({
+      ...options,
+      success: (res) => resolve(res),
+      fail: (err) => reject(err)
+    });
+  });
+};
+
 Page({
 
   /**
@@ -14,7 +26,8 @@ Page({
     schoolMajor: '',
     openid: '',
     access_token: '',
-    nokuaizubook: false
+    nokuaizubook: false,
+    registed: false, // 是否已经注册
   },
 
   // 登录首页
@@ -204,77 +217,52 @@ Page({
   async login5() {
     const { userName, userPhone, userEmail, inSchool, grade, schoolMajor, openid } = this.data;
     wx.setStorageSync('userInfo', { userName, userPhone, userEmail, inSchool, grade, schoolMajor, openid });
-    const app = getApp()
-    // 调用登录接口
-    const { code } = await wx.login();
-    wx.request({
-      url: `${app.globalData.baseUrl}/user/region`,
-      method: 'POST',
-      data: {
-        jsCode: code,
-        phone: userPhone,
-        nickname: userName,
-        email: userEmail,
-        school: inSchool,
-        grade: grade,
-        major: schoolMajor,
-      },
-      success: (res) => {
-        console.log(res)
-        if (res.data.code === 200) {
-          wx.showToast({
-            title: res.data.message,
-            icon: 'success'
-          });
-          wx.setStorageSync('token', res.data.data);
-          wx.request({
-            url: `${app.globalData.baseUrl}/user/login`,
-            method: 'POST',
-            data: {
-              jsCode: code,
-            },
-            headers: {
-              'Authorization': wx.getStorageSync('token')
-            },
-            success: (res) => {
-              console.log("登录请求成功", res)
-              if (res.data.code === 200) {
-                wx.switchTab({
-                  url: '../index/index',
-                });
-              } else {
-                console.error('服务端登录失败', res);
-                wx.showToast({
-                  title: res.data.message,
-                  icon: 'none'
-                });
-              }
-            },
-            fail: (err) => {
-              console.error('登录请求失败', err);
-              wx.showToast({
-                title: '网络错误，请稍后再试',
-                icon: 'none'
-              });
-            }
-          });
-        } else {
-          console.error('注册失败', res);
-          wx.showToast({
-            title: res.data.message,
-            icon: 'none'
-          });
-        }
-      },
-      fail: (err) => {
-        console.error('注册失败', err);
-        wx.showToast({
-          title: '网络错误，请稍后再试',
-          icon: 'none'
+    await this.handleRegisterAndLogin();
+  },
+  async handleRegisterAndLogin() {
+    const { userName, userPhone, userEmail, inSchool, grade, schoolMajor } = this.data;
+    try {
+      // 1. 注册逻辑
+      if (!this.data.registed) {
+        const registerRes = await promisifyRequest({
+          url: `${app.globalData.baseUrl}/user/region`,
+          method: 'POST',
+          data: {
+            jsCode: (await wx.login()).code,
+            phone: userPhone,
+            nickname: userName,
+            email: userEmail,
+            school: inSchool,
+            grade: grade,
+            major: schoolMajor,
+          }
         });
-        console.error('注册失败', err);
+        if (registerRes.data.code === 200) {
+          this.setData({ registed: true }); // 同步更新状态
+          wx.setStorageSync('token', registerRes.data.data);
+          wx.showToast({ title: '注册成功', icon: 'success' });
+        } else {
+          throw new Error(registerRes.data.message || '注册失败');
+        }
       }
-    })
+      // 2. 登录逻辑（注册成功后或已注册时执行）
+      if (this.data.registed) {
+        const loginRes = await promisifyRequest({
+          url: `${app.globalData.baseUrl}/user/login`,
+          method: 'POST',
+          data: { jsCode: (await wx.login()).code },
+          headers: { 'Authorization': wx.getStorageSync('token') }
+        });
+        if (loginRes.data.code === 200) {
+          wx.switchTab({ url: '../index/index' });
+        } else {
+          throw new Error(loginRes.data.message || '登录失败');
+        }
+      }
+    } catch (err) {
+      console.error('操作失败:', err);
+      wx.showToast({ title: err.message, icon: 'none' });
+    }
   },
   /**
    * 生命周期函数--监听页面加载

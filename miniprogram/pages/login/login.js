@@ -207,7 +207,7 @@ Page({
     const app = getApp()
     // 调用登录接口
     const { code } = await wx.login();
-    await wx.request({
+    wx.request({
       url: `${app.globalData.baseUrl}/user/region`,
       method: 'POST',
       data: {
@@ -227,7 +227,39 @@ Page({
             icon: 'success'
           });
           wx.setStorageSync('token', res.data.data);
+          wx.request({
+            url: `${app.globalData.baseUrl}/user/login`,
+            method: 'POST',
+            data: {
+              jsCode: code,
+            },
+            headers: {
+              'Authorization': wx.getStorageSync('token')
+            },
+            success: (res) => {
+              console.log("登录请求成功", res)
+              if (res.data.code === 200) {
+                wx.switchTab({
+                  url: '../index/index',
+                });
+              } else {
+                console.error('服务端登录失败', res);
+                wx.showToast({
+                  title: res.data.message,
+                  icon: 'none'
+                });
+              }
+            },
+            fail: (err) => {
+              console.error('登录请求失败', err);
+              wx.showToast({
+                title: '网络错误，请稍后再试',
+                icon: 'none'
+              });
+            }
+          });
         } else {
+          console.error('注册失败', res);
           wx.showToast({
             title: res.data.message,
             icon: 'none'
@@ -235,44 +267,14 @@ Page({
         }
       },
       fail: (err) => {
+        console.error('注册失败', err);
         wx.showToast({
           title: '网络错误，请稍后再试',
           icon: 'none'
         });
         console.error('注册失败', err);
-        return
       }
     })
-    wx.request({
-      url: `${app.globalData.baseUrl}/user/login`,
-      method: 'POST',
-      data: {
-        jsCode: code,
-      },
-      headers: {
-        'Authorization': wx.getStorageSync('token')
-      },
-      success: (res) => {
-        console.log(res)
-        if (res.data.code === 200) {
-          wx.switchTab({
-            url: '../index/index',
-          });
-        } else {
-          wx.showToast({
-            title: res.data.message,
-            icon: 'none'
-          });
-        }
-      },
-      fail: (err) => {
-        wx.showToast({
-          title: '网络错误，请稍后再试',
-          icon: 'none'
-        });
-        console.error('登录失败', err);
-      }
-    });
   },
   /**
    * 生命周期函数--监听页面加载
